@@ -164,6 +164,11 @@ export class SokobanGame extends GameModel {
         }, 1500);
     }
 
+    // Standardized debug method
+    debugAction() {
+        this.handleWin();
+    }
+
     move(x1: number, y1: number, x2: number, y2: number) {
         this.grid[x2][y2] = this.grid[x1][y1];
         this.grid[x1][y1] = null;

@@ -35,25 +35,37 @@ const App: React.FC = () => {
     const [audio] = useState(() => new SoundManager());
 
     // Fix: Moved loadGame out of useEffect and wrapped in useCallback to fix scope issue.
-    const loadGame = useCallback((id: string) => {
+    const loadGame = useCallback(async (id: string) => {
         const engine = engineRef.current;
         if (!engine) return;
 
         if (activeGameRef.current) {
             activeGameRef.current.stop();
         }
+        // The registry now holds a function that returns a promise
+        const gameDefinition = GAME_REGISTRY[id] || GAME_REGISTRY[DEFAULT_GAME_ID];
+        try {
+            // Execute the dynamic import()
+            const gameModule = await gameDefinition.loader();
+            // Find the class constructor from the module's exports.
+            // This handles both `export default class` and `export class`.
+            const GameClass = gameModule.default || Object.values(gameModule).find(
+                (m) => typeof m === 'function' && /^\s*class\s+/.test(m.toString())
+            );
 
-        const definition = GAME_REGISTRY[id] || GAME_REGISTRY[DEFAULT_GAME_ID];
-        const game = new definition.class(audio);
-
-        activeGameRef.current = game;
-        engine.setGame(game);
-
-        setGameId(id);
-        setHighScore(game.highScore);
-        setIsOrtho(engine.isOrtho);
-        
-        game.start();
+            const game = new GameClass(audio);
+    
+            activeGameRef.current = game;
+            engine.setGame(game);
+    
+            setGameId(id);
+            setHighScore(game.highScore);
+            setIsOrtho(engine.isOrtho);
+            
+            game.start();
+        } catch (error) {
+            console.error("Failed to load game:", id, error);
+        }
     }, [audio]);
 
     useEffect(() => {
@@ -126,7 +138,7 @@ const App: React.FC = () => {
     const handleDebugWin = () => {
         if (activeGameRef.current) {
             const def = GAME_REGISTRY[activeGameRef.current.gameId];
-            if (def?.debug) {
+            if (def && def.debug) {
                 def.debug(activeGameRef.current);
             }
         }

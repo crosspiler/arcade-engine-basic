@@ -134,6 +134,11 @@ export class Match3Game extends GameModel {
         }
     }
 
+    // Standardized debug method
+    debugAction() {
+        this.updateScore(5000);
+    }
+
     emit() {
         const r: GameItem[] = [];
         for (let x = 0; x < this.width; x++) {

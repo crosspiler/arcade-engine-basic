@@ -8,6 +8,7 @@
     "build": "tsc && vite build",
     "build:spr": "vite build --config vite.config.separate.ts",
     "serve:build": "serve dist",
+    "serve:temp": "serve temp",
     "preview": "vite preview"
   },
   "devDependencies": {

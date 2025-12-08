@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>arcade-engine-vanila</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <script type="importmap">
+    {
+      "imports": {
+        "three": "https://esm.sh/three@0.181.2",
+        "rxjs": "https://esm.sh/rxjs@7.8.2"
+      }
+    }
+    </script>
+    <style>
+      /* Paste the content of /index.css here */
+    </style>
+    <!-- <link rel="modulepreload" crossorigin href="/game-registry.js"> -->
+    <script type="module">
+      const GITHUB_BASE_URL = 'https://raw.githubusercontent.com/crosspiler/arcade-engine-basic/main/arcade-engine-vanila/dist';
+      
+      const scriptUrls = {
+        engine: `${GITHUB_BASE_URL}/engine.js`,
+        gameRegistry: `${GITHUB_BASE_URL}/game-registry.js`,
+        main: `${GITHUB_BASE_URL}/index.js`,
+      };
+
+      const gameUrls = {
+        'Snake.js': './games/Snake.js', // Local
+        // 'Snake.js': `${GITHUB_BASE_URL}/games/Snake.js`,
+        'Sokoban.js': `${GITHUB_BASE_URL}/games/Sokoban.js`,
+        'Match3.js': `${GITHUB_BASE_URL}/games/Match3.js`,
+        'Tetris.js': `${GITHUB_BASE_URL}/games/Tetris.js`,
+        'Game2048.js': `${GITHUB_BASE_URL}/games/Game2048.js`,
+        'LightsOut.js': `${GITHUB_BASE_URL}/games/LightsOut.js`,
+        'Minesweeper.js': `${GITHUB_BASE_URL}/games/Minesweeper.js`,
+        'Memory.js': `${GITHUB_BASE_URL}/games/Memory.js`,
+        'Simon.js': `${GITHUB_BASE_URL}/games/Simon.js`,
+        'TicTacToe.js': `${GITHUB_BASE_URL}/games/TicTacToe.js`,
+        'SlidingPuzzle.js': `${GITHUB_BASE_URL}/games/SlidingPuzzle.js`,
+        'WhackAMole.js': `${GITHUB_BASE_URL}/games/WhackAMole.js`,
+        'SameGame.js': `${GITHUB_BASE_URL}/games/SameGame.js`,
+        'MazeRun.js': `${GITHUB_BASE_URL}/games/MazeRun.js`,
+        'Sudoku.js': `${GITHUB_BASE_URL}/games/Sudoku.js`,
+        'Crossword.js': `${GITHUB_BASE_URL}/games/Crossword.js`,
+        'GameModel.js': `${GITHUB_BASE_URL}/GameModel.js`,
+      }
+
+      const blobCache = new Map();
+      window.importFromBlobUrl = async function(url) {
+        if (blobCache.has(url)) {
+          return import(blobCache.get(url));
+        }
+
+        const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch script for blob: ${url}`);
+        }
+        let scriptText = await response.text();
+
+        // Find all relative imports (e.g., "./engine.js" or "../GameModel.js")
+        const importRegex = /from\s+['"](\.\.?\/[^'"]+)['"]/g;
+        const matches = [...scriptText.matchAll(importRegex)];
+
+        // Determine the correct base URL for resolving relative paths.
+        // For remote files, it's the file's own URL.
+        // For local files (like './games/Snake.js'), it's the document's base URL.
+        const baseUrl = url.startsWith('.') ? window.location.href : url;
+
+        for (const match of matches) {
+            const relativePath = match[1];
+            const dependencyFilename = relativePath.split('/').pop();
+
+            // First, check if the dependency is a known shared module (like GameModel.js).
+            // If not, resolve it relative to the importing script's URL.
+            const absoluteUrl = gameUrls[dependencyFilename] || new URL(relativePath, baseUrl).href;
+
+            // Pre-warm the cache for the dependency
+            await window.importFromBlobUrl(absoluteUrl); // This will populate blobCache
+            // Replace with the cached blob URL
+            scriptText = scriptText.replace(relativePath, blobCache.get(absoluteUrl));
+        }
+
+        const blob = new Blob([scriptText], { type: 'text/javascript' });
+        const blobUrl = URL.createObjectURL(blob);
+        blobCache.set(url, blobUrl);
+        return import(blobUrl);
+      }
+
+      /**
+       * Fetches a script as text and creates an importable module from it.
+       * @param {string} url The URL of the JavaScript file.
+       * @returns {Promise<any>} A promise that resolves to the module's exports.
+       */
+      async function importFromUrl(url, dependencyUrls = {}) {
+        const dependencyBlobs = {};
+        for (const [specifier, depUrl] of Object.entries(dependencyUrls)) {
+            // Recursively call for dependencies, but without their own dependencies for now.
+            // This could be made more robust if there are deeper nested local dependencies.
+            const depModuleBlob = await createBlobFromUrl(depUrl);
+            dependencyBlobs[specifier] = depModuleBlob;
+        }
+
+        const scriptBlob = await createBlobFromUrl(url, dependencyBlobs);
+        const module = await import(scriptBlob);
+        return module;
+      }
+
+      async function createBlobFromUrl(url, dependencyBlobs = {}) {
+        const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch script: ${url}`);
+        }
+        let scriptText = await response.text();
+        // Special handling for game-registry to fix dynamic imports
+        if (url === scriptUrls.gameRegistry) {
+            scriptText = scriptText.replace(/__vitePreload\(\(\) => import\("(\.\/games\/[^"]+)"\), __vite__mapDeps\(\[.+?\]\)\)/g, (match, p1) => {
+                const gameFileName = p1.split('/').pop();
+                return `window.importFromBlobUrl("${gameUrls[gameFileName] || p1}")`;
+            });
+        }
+        // Replace relative imports with blob URLs
+        for (const [specifier, blobUrl] of Object.entries(dependencyBlobs)) {
+            const regex = new RegExp(`(from\\s+['"])(\\./${specifier})(['"])`, "g");
+            scriptText = scriptText.replace(regex, `$1${blobUrl}$3`);
+        }
+        const blob = new Blob([scriptText], { type: 'text/javascript' });
+        const blobUrl = URL.createObjectURL(blob);
+        return blobUrl;
+      }
+
+      /**
+       * The main entry point to load and run the application.
+       */
+      async function main() {
+        try {
+            console.log('Loading modules...');
+            
+            // Initialize the main script, passing the loaded modules as dependencies
+            const mainModule = await importFromUrl(scriptUrls.main, {
+                'engine.js': scriptUrls.engine,
+                'game-registry.js': scriptUrls.gameRegistry
+            });
+            
+            // The main module should now initialize everything.
+            console.log('Application initialized via blobs.');
+        } catch (error) {
+            console.error('Failed to initialize application:', error);
+            document.getElementById('app').innerHTML = `<div style="color: red; padding: 20px;">Error: ${error.message}</div>`;
+        }
+      }
+
+      main();
+    </script>
+  </head>
+  <body>
+    <div id="app">
+    </div>
+  </body>
+</html>

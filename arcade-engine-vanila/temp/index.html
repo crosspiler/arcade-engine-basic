@@ -53,6 +53,13 @@
         'GameModel.js': `${GITHUB_BASE_URL}/GameModel.js`,
       }
 
+      // 2. Define a list of local games to add to the registry.
+      const localGamesToAdd = [
+        { id: 'lightscopy', name: 'Lights Copy', fileName: 'LightsCopy.js' },
+        { id: 'memorymatrix', name: 'Memory Matrix', fileName: 'MemoryMatrix.js' },
+        // Add more local games here in the future
+      ];
+
       // =================================================================================
       // DYNAMIC MODULE LOADER
       // =================================================================================
@@ -130,14 +137,31 @@
       async function main() {
         try {
             console.log('Loading modules...');
-
-            // Pre-warm the cache for the core application modules. The order is not
-            // critical as dependencies are resolved recursively.
+            
+            // 1. Load core engine and the remote game registry.
             await importFromBlobUrl(scriptUrls.engine);
-            await importFromBlobUrl(scriptUrls.gameRegistry);
+            const gameRegistryModule = await importFromBlobUrl(scriptUrls.gameRegistry);
 
-            // Finally, import the main entry point to start the application.
+            // Augment the game registry with each local game.
+            for (const game of localGamesToAdd) {
+              // Ensure the loader knows the path to the local game file.
+              gameUrls[game.fileName] = `./games/${game.fileName}`;
+
+              const newGameEntry = {
+                id: game.id,
+                name: game.name,
+                loader: () => window.importFromBlobUrl(gameUrls[game.fileName]),
+              };
+
+              // Add the game to the minified GAME_LIST (t) and GAME_REGISTRY (n).
+              gameRegistryModule.t.push({ id: newGameEntry.id, name: newGameEntry.name }); 
+              gameRegistryModule.n[newGameEntry.id] = newGameEntry;
+            }
+
+            // 3. Finally, import the main entry point which will now see the augmented game list.
             await importFromBlobUrl(scriptUrls.main);
+
+            console.log('Application initialized with augmented game registry.');
         } catch (error) {
             console.error('Failed to initialize application:', error);
             document.getElementById('app').innerHTML = `<div style="color: red; padding: 20px;">Error: ${error.message}</div>`;

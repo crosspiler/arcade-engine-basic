@@ -71,7 +71,7 @@ var LightsCopyGame = class extends GameModel {
         return {
             geometry: "box",
             colors: {
-                0: 2236962,
+                0: 99969629,
                 1: 16776960
             },
             bgColor: 0

@@ -1,6 +1,6 @@
-import { i as GameRenderer, n as SoundManager, r as InputManager, t as DebugCamera } from "./engine.js";
+import { DebugCamera, GameRenderer, InputManager, SoundManager } from "./engine.js";
 
-import { n as GAME_REGISTRY, t as GAME_LIST } from "./game-registry.js";
+import { GAME_LIST, GAME_REGISTRY } from "./game-registry.js";
 
 //#region \0vite/modulepreload-polyfill.js
 (function polyfill() {

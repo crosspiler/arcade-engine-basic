@@ -27,6 +27,8 @@ const separateBuildOptions: { build: BuildOptions } = {
         'rxjs'
       ],
       output: {
+        // Stop Rollup from renaming exports (e.g. 'GameRenderer as i')
+        minifyInternalExports: false,
         // Place main entry file in dist root, e.g., dist/index.js
         entryFileNames: `[name].js`,
         // Place asset files like CSS in dist root

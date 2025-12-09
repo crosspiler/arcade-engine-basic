@@ -1020,4 +1020,4 @@ var DebugCamera = class {
 };
 
 //#endregion
-export { GameRenderer as i, SoundManager as n, InputManager as r, DebugCamera as t };
+export { DebugCamera, GameRenderer, InputManager, SoundManager };

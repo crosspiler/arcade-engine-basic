@@ -65,4 +65,4 @@ var GameModel = class {
 };
 
 //#endregion
-export { GameModel as t };
+export { GameModel };

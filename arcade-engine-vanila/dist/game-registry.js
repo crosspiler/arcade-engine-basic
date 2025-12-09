@@ -167,4 +167,4 @@ const GAME_LIST = ALL_GAMES.map(({id: id, name: name}) => ({
 const GAME_IDS = ALL_GAMES.map(g => g.id);
 
 //#endregion
-export { GAME_REGISTRY as n, GAME_LIST as t };
+export { GAME_LIST, GAME_REGISTRY };

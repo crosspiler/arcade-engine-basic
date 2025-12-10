@@ -62,4 +62,23 @@ export abstract class GameModel {
     
     abstract handleInput(action: InputAction): void;
     abstract getRenderConfig(): RenderConfig;
+
+    // Save/Load Interface
+    public serialize(): any {
+        return {
+            score: this.score,
+            level: this.level,
+            subStat: this.subStat
+        };
+    }
+
+    public deserialize(data: any): void {
+        if (data) {
+            this.score = data.score || 0;
+            this.level = data.level || 1;
+            this.subStat = data.subStat || 0;
+            this.score$.next(this.score);
+            this.subStat$.next(this.subStat);
+        }
+    }
 }

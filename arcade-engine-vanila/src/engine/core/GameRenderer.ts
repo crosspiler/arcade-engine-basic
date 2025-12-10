@@ -2,7 +2,8 @@
 import * as THREE from 'three';
 import { Subscription, interval } from 'rxjs';
 import { GameModel } from '../../games/GameModel';
-import { ModelManager } from './ModelManager';
+import { SceneEntityManager } from './SceneEntityManager';
+import { PostProcessor } from './PostProcessor';
 import { ParticleManager } from './ParticleManager';
 import { InputManager } from './InputManager';
 import { Menu3D, type MenuCallbacks } from './Menu3D';
@@ -21,11 +22,9 @@ export class GameRenderer implements MenuContext {
     activeCamera: THREE.Camera;
     externalCamera: THREE.Camera | null = null;
     
-    group: THREE.Group;
-    meshes: Map<string, THREE.Mesh>;
-    textureCache: Map<string, THREE.CanvasTexture>;
+    sceneEntityManager: SceneEntityManager;
     particles: ParticleManager;
-    modelManager: ModelManager;
+    postProcessor: PostProcessor;
     menu: Menu3D;
     gridHelper: THREE.GridHelper;
     cameraHelper: THREE.CameraHelper;
@@ -62,6 +61,7 @@ export class GameRenderer implements MenuContext {
         this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         this.renderer.setSize(container.clientWidth, container.clientHeight);
         this.renderer.setPixelRatio(window.devicePixelRatio);
+        this.renderer.info.autoReset = false;
         container.appendChild(this.renderer.domElement);
         
         // Cameras
@@ -85,8 +85,8 @@ export class GameRenderer implements MenuContext {
         this.scene.add(light);
         this.scene.add(new THREE.AmbientLight(0xffffff, 0.4));
         
-        this.group = new THREE.Group();
-        this.scene.add(this.group);
+        this.sceneEntityManager = new SceneEntityManager();
+        this.scene.add(this.sceneEntityManager.group);
         
         // Add GridHelper and CameraHelper for debug view
         this.gridHelper = new THREE.GridHelper(50, 50, 0x444444, 0x222222);
@@ -97,10 +97,10 @@ export class GameRenderer implements MenuContext {
         this.cameraHelper.visible = false;
         this.scene.add(this.cameraHelper);
 
-        this.meshes = new Map();
-        this.textureCache = new Map();
         this.particles = new ParticleManager(this.scene);
-        this.modelManager = new ModelManager();
+        
+        // Initialize PostProcessor
+        this.postProcessor = new PostProcessor(this.renderer, this.scene, this.activeCamera, width, height);
 
         // Menu is now parented to the camera for consistent scale
         this.menu = new Menu3D(this.activeCamera, inputManager, this, callbacks, this.audio, gameList);
@@ -133,17 +133,12 @@ export class GameRenderer implements MenuContext {
         this.subs.forEach(s => s.unsubscribe());
         this.subs = [];
         
-        // Clear meshes with disposal
-        this.meshes.forEach(m => {
-            this.group.remove(m);
-            this.disposeMesh(m);
-        });
-        this.meshes.clear();
-        this.textureCache.forEach(t => t.dispose());
-        this.textureCache.clear();
+        this.sceneEntityManager.clear();
         
         this.activeGame = game;
         this.renderConfig = game.getRenderConfig();
+        this.sceneEntityManager.setConfig(this.renderConfig);
+        
         this.scene.background = new THREE.Color(this.renderConfig.bgColor);
         
         this.syncCamera();
@@ -155,7 +150,9 @@ export class GameRenderer implements MenuContext {
         this.menu.callbacks.onStatsUpdate(); 
         
         // Subscriptions
-        this.subs.push(game.state$.subscribe(items => this.sync(items)));
+        this.subs.push(game.state$.subscribe(items => {
+            if (this.activeGame) this.sceneEntityManager.sync(items, this.activeGame.width, this.activeGame.height);
+        }));
         
         this.subs.push(game.score$.subscribe(s => {
             this.menu.updateScore(s);
@@ -213,6 +210,7 @@ export class GameRenderer implements MenuContext {
         
         // Update menu parenting and camera helper
         this.menu.setCamera(this.activeCamera);
+        this.postProcessor.setCamera(this.activeCamera);
         this.cameraHelper.camera = this.activeCamera;
         
         this.syncCamera();
@@ -245,6 +243,7 @@ export class GameRenderer implements MenuContext {
 
     private renderLoop = (time: number) => {
         this.animationFrameId = requestAnimationFrame(this.renderLoop);
+        this.renderer.info.reset();
         
         const now = performance.now();
         const elapsed = now - this.then;
@@ -283,8 +282,8 @@ export class GameRenderer implements MenuContext {
             this.cameraHelper.update();
         }
 
-        // Render the scene
-        this.renderer.render(this.scene, currentCam);
+        // Render via PostProcessor
+        this.postProcessor.render(deltaTime);
         TWEEN.update();
 
         // Update triangle count after render
@@ -315,11 +314,11 @@ export class GameRenderer implements MenuContext {
         const scaleX = gameWorldWidth > 0 ? availableWidth / gameWorldWidth : 1;
         
         const scale = Math.min(scaleX, scaleY);
-        this.group.scale.set(scale, scale, scale);
+        this.sceneEntityManager.group.scale.set(scale, scale, scale);
     }
 
     private _setupPerspCamera(maxDim: number, aspect: number) {
-        this.group.scale.set(1, 1, 1);
+        this.sceneEntityManager.group.scale.set(1, 1, 1);
         this.perspCam.aspect = aspect;
         const distance = maxDim * 2.0; 
         this.perspCam.position.set(0, 0, distance);
@@ -340,169 +339,11 @@ export class GameRenderer implements MenuContext {
         return { visibleWidth: 10 * aspect, visibleHeight: 10 };
     }
     
-    createLabelTexture(text: string, bgColor: number, textColor: string = '#ffffff') {
-        const key = `${text}_${bgColor}_${textColor}`;
-        if (this.textureCache.has(key)) return this.textureCache.get(key);
-
-        const canvas = document.createElement('canvas');
-        canvas.width = 128;
-        canvas.height = 128;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-            const bgHex = '#' + bgColor.toString(16).padStart(6, '0');
-            ctx.fillStyle = bgHex;
-            ctx.fillRect(0, 0, 128, 128);
-            
-            ctx.font = 'bold 80px sans-serif';
-            ctx.fillStyle = textColor;
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(text, 64, 64);
-            
-            ctx.strokeStyle = 'rgba(255,255,255,0.2)';
-            ctx.lineWidth = 4;
-            ctx.strokeRect(2, 2, 124, 124);
-        }
-        const tex = new THREE.CanvasTexture(canvas);
-        this.textureCache.set(key, tex);
-        return tex;
-    }
-
-    async sync(items: GameItem[]) {
-        if (!this.activeGame) return;
-        
-        const activeIds = new Set<string>();
-        const tileSize = 1.1;
-        const offsetX = (this.activeGame.width * tileSize) / 2 - 0.5;
-        const offsetY = (this.activeGame.height * tileSize) / 2 - 0.5;
-
-        for (const item of items) {
-            activeIds.add(item.id);
-            let mesh = this.meshes.get(item.id);
-            const tx = item.x * tileSize - offsetX;
-            const ty = item.y * tileSize - offsetY;
-            
-            const zOffset = (item.type === 0) ? -0.1 : 0;
-            const color = (this.renderConfig.colors && this.renderConfig.colors[item.type]) || 0xffffff;
-
-            if (!mesh) {
-                // --- NEW: Custom Model Loading ---
-                if (item.modelId && this.renderConfig.models && this.renderConfig.models[item.modelId]) {
-                    const modelUrl = this.renderConfig.models[item.modelId];
-                    try {
-                        const modelGroup = await this.modelManager.get(modelUrl);
-                        // Assuming the loaded model is a Mesh or a Group containing a Mesh
-                        mesh = modelGroup.children[0] as THREE.Mesh;
-                        if (!mesh) {
-                             console.warn(`Model at ${modelUrl} does not have a valid mesh at children[0].`);
-                             continue;
-                        }
-                        // Apply a default material if none exists
-                        if (!mesh.material) {
-                            if (this.renderConfig.shading === 'standard') {
-                                mesh.material = new THREE.MeshStandardMaterial({ color });
-                            } else {
-                                mesh.material = new THREE.MeshBasicMaterial({ color });
-                            }
-                        }
-                    } catch (error) {
-                        console.error(`Could not load model for item ${item.id}`, error);
-                        continue; // Skip this item if model fails to load
-                    }
-                } else {
-                    const geom = this.createGeometry(item.type);
-                    const mat = this.renderConfig.shading === 'standard'
-                        ? new THREE.MeshStandardMaterial({ color, metalness: 0.2, roughness: 0.8 })
-                        : new THREE.MeshBasicMaterial({ color });
-                    mesh = new THREE.Mesh(geom, mat);
-                }
-
-                // Common setup for new meshes
-                if (item.scale) {
-                    mesh.scale.set(item.scale, item.scale, item.scale);
-                }
-
-                this.group.add(mesh);
-                this.meshes.set(item.id, mesh);
-
-                if (item.spawnStyle === 'instant') {
-                    mesh.position.set(tx, ty, zOffset);
-                } else if (item.spawnStyle === 'pop') {
-                    mesh.position.set(tx, ty, zOffset);
-                    mesh.scale.set(0, 0, 0);
-                    TWEEN.to(mesh.scale, { x: 1, y: 1, z: 1 }, 200, 'outBack');
-                } else {
-                    mesh.position.set(tx, ty + 10, zOffset);
-                    TWEEN.to(mesh.position, { x: tx, y: ty }, 400, 'elastic');
-                }
-            } else {
-                const mat = mesh.material as THREE.MeshBasicMaterial | THREE.MeshStandardMaterial;
-                
-                if (item.text !== undefined) {
-                    const tex = this.createLabelTexture(item.text, color, item.textColor);
-                    if (mat.map !== tex) {
-                        mat.map = tex || null;
-                        mat.color.setHex(0xffffff);
-                        mat.needsUpdate = true;
-                    }
-                } else {
-                    if (mat.map) {
-                        mat.map = null;
-                        mat.needsUpdate = true;
-                    }
-                    mat.color.setHex(color);
-                }
-
-                if (Math.abs(mesh.position.x - tx) > 0.01 || Math.abs(mesh.position.y - ty) > 0.01 || mesh.position.z !== zOffset) {
-                    TWEEN.to(mesh.position, { x: tx, y: ty, z: zOffset }, 150);
-                }
-            }
-        }
-
-        this.meshes.forEach((m, id) => {
-            if (!activeIds.has(id)) {
-                this.group.remove(m);
-                this.disposeMesh(m);
-                this.meshes.delete(id);
-            }
-        });
-    }
-
-    private createGeometry(type: number): THREE.BufferGeometry {
-        const geoType = this.renderConfig.geometry?.[type] || this.renderConfig.geometry?.['default'] || 'Box';
-        
-        // A simple factory for creating geometries
-        switch (geoType) {
-            case 'Cylinder':
-                const cylGeom = new THREE.CylinderGeometry(0.4, 0.4, 0.3, 32);
-                cylGeom.rotateX(Math.PI / 2);
-                return cylGeom;
-            case 'Sphere':
-                return new THREE.SphereGeometry(0.5, 32, 16);
-            case 'Torus':
-                return new THREE.TorusGeometry(0.4, 0.15, 16, 100);
-            case 'Icosahedron':
-                return new THREE.IcosahedronGeometry(0.5);
-            case 'Cone':
-                return new THREE.ConeGeometry(0.5, 1, 32);
-            default: // 'Box'
-                return new THREE.BoxGeometry(0.9, 0.9, 0.9);
-        }
-    }
-
-    disposeMesh(m: THREE.Mesh) {
-        if (m.geometry) m.geometry.dispose();
-        if (Array.isArray(m.material)) {
-            m.material.forEach(mat => mat.dispose());
-        } else if (m.material) {
-            (m.material as THREE.Material).dispose();
-        }
-    }
-    
     onResize() {
         const width = window.innerWidth;
         const height = window.innerHeight;
         this.renderer.setSize(width, height);
+        this.postProcessor.setSize(width, height);
         
         const aspect = height > 0 ? width / height : 1;
         this.perspCam.aspect = aspect;
@@ -517,14 +358,14 @@ export class GameRenderer implements MenuContext {
     
     getGridFromRay(raycaster: THREE.Raycaster) {
         if (!this.activeGame) return null;
-        const intersects = raycaster.intersectObjects(this.group.children);
+        const intersects = raycaster.intersectObjects(this.sceneEntityManager.group.children);
         if (intersects.length > 0) {
             const tileSize = 1.1;
             const offsetX = (this.activeGame.width * tileSize) / 2 - 0.5;
             const offsetY = (this.activeGame.height * tileSize) / 2 - 0.5;
             
             // Account for group scale
-            const hitPoint = intersects[0].point.clone().divide(this.group.scale);
+            const hitPoint = intersects[0].point.clone().divide(this.sceneEntityManager.group.scale);
 
             const gx = Math.round((hitPoint.x + offsetX) / tileSize);
             const gy = Math.round((hitPoint.y + offsetY) / tileSize);
@@ -540,15 +381,32 @@ export class GameRenderer implements MenuContext {
         
         this.menu.destroy();
         
-        this.meshes.forEach(m => {
-            this.disposeMesh(m);
-        });
-        this.textureCache.forEach(t => t.dispose());
+        this.sceneEntityManager.clear();
         
         this.renderer.dispose();
         
         if (this.renderer.domElement.parentNode) {
             this.renderer.domElement.parentNode.removeChild(this.renderer.domElement);
         }
+    }
+
+    // --- Post Processing Public API ---
+    public setToneMapping(toneMapping: THREE.ToneMapping) {
+        this.renderer.toneMapping = toneMapping;
+        this.scene.traverse((object) => {
+            if ((object as any).isMesh) (object as any).material.needsUpdate = true;
+        });
+    }
+
+    public setDotScreen(enabled: boolean, scale: number) {
+        this.postProcessor.setDotScreen(enabled, scale);
+    }
+
+    public setCurvature(enabled: boolean, amount: number) {
+        this.postProcessor.setCurvature(enabled, amount);
+    }
+
+    public setColorCorrection(tint: number, grayscale: number) {
+        this.postProcessor.setColorCorrection(tint, grayscale);
     }
 }

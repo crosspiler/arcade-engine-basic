@@ -28,15 +28,20 @@ export class InputManager {
         const getRayIntersects = (cx: number, cy: number) => {
             const cam = cameraGetter();
             if (!cam) return null;
-            const mouse = new THREE.Vector2((cx / window.innerWidth) * 2 - 1, -(cy / window.innerHeight) * 2 + 1);
+            
+            const rect = domElement.getBoundingClientRect();
+            const x = ((cx - rect.left) / rect.width) * 2 - 1;
+            const y = -((cy - rect.top) / rect.height) * 2 + 1;
+            
+            const mouse = new THREE.Vector2(x, y);
             const raycaster = new THREE.Raycaster();
             raycaster.setFromCamera(mouse, cam);
             return raycaster;
         };
 
         const pointer$ = merge(
-            fromEvent<MouseEvent>(window, 'mousedown').pipe(map(e => ({ x: e.clientX, y: e.clientY }))),
-            fromEvent<TouchEvent>(window, 'touchstart').pipe(map(e => {
+            fromEvent<MouseEvent>(domElement, 'mousedown').pipe(map(e => ({ x: e.clientX, y: e.clientY }))),
+            fromEvent<TouchEvent>(domElement, 'touchstart').pipe(map(e => {
                 const t = e.touches[0];
                 return t ? { x: t.clientX, y: t.clientY } : null;
             }), filter(p => p !== null))

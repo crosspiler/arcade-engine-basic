@@ -2,7 +2,7 @@
 import { GameModel } from './GameModel';
 import type{ GameItem, InputAction, SoundEmitter } from '../engine/types';
 
-export class SimonGame extends GameModel {
+export default class SimonGame extends GameModel {
     sequence: number[] = [];
     userStep = 0;
     state: 'WATCH' | 'INPUT' | 'GAME_OVER' = 'WATCH';

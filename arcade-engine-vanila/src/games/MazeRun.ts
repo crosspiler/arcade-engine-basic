@@ -2,7 +2,7 @@
 import { GameModel } from './GameModel';
 import type{ GameItem, InputAction, SoundEmitter } from '../engine/types';
 
-export class MazeRun extends GameModel {
+export default class MazeRun extends GameModel {
     grid: number[][] = [];
     player = { x: 1, y: 1 };
     exit = { x: 13, y: 13 };

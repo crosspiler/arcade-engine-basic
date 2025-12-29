@@ -2,7 +2,7 @@
 import { GameModel } from './GameModel';
 import type{ GameItem, InputAction, SoundEmitter } from '../engine/types';
 
-export class LightsOutGame extends GameModel {
+export default class LightsOutGame extends GameModel {
     grid: boolean[][] = [];
     
     constructor(audio?: SoundEmitter) { super(5, 5, 'lightsout', audio); }

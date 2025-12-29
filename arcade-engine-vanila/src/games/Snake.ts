@@ -1,47 +1,64 @@
 
-import { interval, filter } from 'rxjs';
 import { GameModel } from './GameModel';
 import type{ GameItem, InputAction, SoundEmitter } from '../engine/types';
+import { DirectionalInteraction } from '../engine/features/interactionSystems/DirectionalInteraction';
+import { GameLoop } from '../engine/features/GameLoop';
 
-export class SnakeGame extends GameModel {
+export default class SnakeGame extends GameModel {
     d = { x: 0, y: 1 };
     nd = { x: 0, y: 1 };
     snake: GameItem[] = [];
     food: GameItem | null = null;
+    interaction: DirectionalInteraction;
+    gameLoop: GameLoop;
+    timeAccumulator = 0;
 
-    constructor(audio?: SoundEmitter) { super(15, 15, 'snake', audio); }
+    constructor(audio?: SoundEmitter) { 
+        super(15, 15, 'snake', audio);
+        this.interaction = new DirectionalInteraction(
+            (dx, dy) => {
+                // Prevent 180 degree turns
+                if (dx !== -this.d.x || dy !== -this.d.y) {
+                    this.nd = { x: dx, y: dy };
+                }
+            },
+            () => this.start()
+        );
+        this.gameLoop = new GameLoop((dt) => this.tick(dt));
+    }
 
     start() {
         this.isGameOver = false;
         this.snake = [{ x: 7, y: 7, id: this.uid(), type: 0 }];
         this.d = { x: 0, y: 1 };
+        this.nd = { x: 0, y: 1 };
         this.spawn();
         this.status$.next('Eat');
 
-        this.sub.add(
-            interval(200).pipe(
-                filter(() => !this.isPaused && !this.isGameOver)
-            ).subscribe(() => this.tick())
-        );
+        this.timeAccumulator = 0;
+        this.gameLoop.start();
     }
 
     handleInput(action: InputAction) {
-        if (this.isPaused || this.isGameOver) return;
-        const map: any = { UP: {x:0,y:1}, DOWN: {x:0,y:-1}, LEFT: {x:-1,y:0}, RIGHT: {x:1,y:0} };
-        const n = map[action.type];
-        if (n && (n.x !== -this.d.x || n.y !== -this.d.y)) this.nd = n;
+        this.interaction.handleInput(action, this.isGameOver);
     }
 
-    tick() {
+    tick(dt: number) {
+        if (this.isPaused || this.isGameOver) return;
+
+        this.timeAccumulator += dt;
+        if (this.timeAccumulator < 0.15) return; // 150ms tick (slightly faster than before)
+        this.timeAccumulator -= 0.15;
+
         this.d = this.nd;
         const h = this.snake[0];
         const nh: GameItem = { x: h.x + this.d.x, y: h.y + this.d.y, id: this.uid(), type: 0 };
 
         if (nh.x < 0 || nh.x >= 15 || nh.y < 0 || nh.y >= 15 || this.snake.some(s => s.x === nh.x && s.y === nh.y)) {
-            this.stop();
             this.isGameOver = true;
             this.status$.next('GAME OVER');
             this.audio.playGameOver();
+            this.gameLoop.stop();
             setTimeout(() => this.effects$.next({ type: 'GAMEOVER' }), 2000);
             return;
         }
@@ -72,8 +89,8 @@ export class SnakeGame extends GameModel {
     }
 
     emit() {
-        const r = this.snake.map((s, i) => ({ id: s.id, x: s.x, y: s.y, type: i ? 1 : 0, spawnStyle: 'instant' as const }));
-        if (this.food) r.push({ ...this.food, spawnStyle: 'instant' as const });
+        const r: GameItem[] = this.snake.map((s, i) => ({ id: s.id, x: s.x, y: s.y, type: i ? 1 : 0 }));
+        if (this.food) r.push({ ...this.food });
         this.state$.next(r);
     }
 

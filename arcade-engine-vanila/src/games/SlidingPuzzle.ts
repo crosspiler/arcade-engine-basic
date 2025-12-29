@@ -2,7 +2,7 @@
 import { GameModel } from './GameModel';
 import type{ GameItem, InputAction, SoundEmitter } from '../engine/types';
 
-export class SlidingPuzzle extends GameModel {
+export default class SlidingPuzzle extends GameModel {
     tiles: { v: number, x: number, y: number }[] = [];
 
     constructor(audio?: SoundEmitter) { super(4, 4, 'sliding', audio); }

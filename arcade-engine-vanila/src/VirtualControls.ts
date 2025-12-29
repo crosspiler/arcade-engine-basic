@@ -1,9 +1,7 @@
-import type { Action } from "rxjs/internal/scheduler/Action";
 import type { InputManager } from "./engine/core/InputManager";
 
 
 export class VirtualControls {
-    private container: HTMLElement;
     private element: HTMLElement;
     private inputManager: InputManager;
 

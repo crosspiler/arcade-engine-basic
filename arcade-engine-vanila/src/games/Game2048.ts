@@ -2,7 +2,7 @@
 import { GameModel } from './GameModel';
 import type{ GameItem, InputAction, SoundEmitter } from '../engine/types';
 
-export class Game2048 extends GameModel {
+export default class Game2048 extends GameModel {
     pieces: GameItem[] = [];
     cols: Record<number, number> = { 1: 0xeee4da, 2: 0xede0c8, 3: 0xf2b179, 4: 0xf59563, 5: 0xf67c5f, 6: 0xf65e3b, 7: 0xedcf72, 8: 0xedcc61 };
 

@@ -1,6 +1,7 @@
-import { interval, filter } from 'rxjs';
 import { GameModel } from './GameModel';
 import type { GameItem, InputAction, SoundEmitter } from '../engine/types';
+import { Grid } from '../engine/features/Grid';
+import { GameLoop } from '../engine/features/GameLoop';
 
 const EMPTY = 0;
 const FILLED = 1;
@@ -8,7 +9,7 @@ const BORDER = 2;
 const TRAIL = 3;
 
 export default class Qix extends GameModel {
-    grid: number[][] = [];
+    grid!: Grid<number>;
     player = { x: 0, y: 0, drawing: false };
     trail: {x: number, y: number}[] = [];
     
@@ -19,9 +20,12 @@ export default class Qix extends GameModel {
 
     filledCount = 0;
     totalArea = 0;
+    gameLoop: GameLoop;
 
     constructor(audio?: SoundEmitter) {
         super(20, 15, 'qix', audio);
+        this.grid = new Grid(20, 15, EMPTY);
+        this.gameLoop = new GameLoop((dt) => this.tick(dt));
     }
 
     start() {
@@ -38,15 +42,15 @@ export default class Qix extends GameModel {
         this.resize(w, h);
         
         // Init grid: Borders are filled, inside is empty
-        this.grid = Array(this.width).fill(0).map(() => Array(this.height).fill(EMPTY));
+        this.grid = new Grid(this.width, this.height, EMPTY);
         
         for(let x=0; x<this.width; x++) {
-            this.grid[x][0] = BORDER;
-            this.grid[x][this.height-1] = BORDER;
+            this.grid.set(x, 0, BORDER);
+            this.grid.set(x, this.height-1, BORDER);
         }
         for(let y=0; y<this.height; y++) {
-            this.grid[0][y] = BORDER;
-            this.grid[this.width-1][y] = BORDER;
+            this.grid.set(0, y, BORDER);
+            this.grid.set(this.width-1, y, BORDER);
         }
 
         this.totalArea = (this.width-2) * (this.height-2);
@@ -61,15 +65,14 @@ export default class Qix extends GameModel {
         for (let i = 0; i < numQixes; i++) {
             this.qixes.push({
                 pos: { x: this.width/2 + (Math.random()-0.5)*10, y: this.height/2 + (Math.random()-0.5)*10 },
-                vel: { x: (0.5 + this.level * 0.05) * (Math.random() > 0.5 ? 1 : -1), y: (0.4 + this.level * 0.05) * (Math.random() > 0.5 ? 1 : -1) }
+                vel: { x: (10.0 + this.level * 1.0) * (Math.random() > 0.5 ? 1 : -1), y: (8.0 + this.level * 1.0) * (Math.random() > 0.5 ? 1 : -1) }
             });
         }
 
         this.status$.next(`Level ${this.level}: 0%`);
         this.emit();
 
-        this.stop();
-        this.sub.add(interval(50).pipe(filter(() => !this.isPaused && !this.isGameOver)).subscribe(() => this.tick()));
+        this.gameLoop.start();
     }
 
     handleInput(action: InputAction) {
@@ -88,7 +91,7 @@ export default class Qix extends GameModel {
 
         if (nx < 0 || nx >= this.width || ny < 0 || ny >= this.height) return;
 
-        const targetCell = this.grid[nx][ny];
+        const targetCell = this.grid.get(nx, ny);
 
         if (this.player.drawing) {
             if (targetCell === EMPTY) {
@@ -117,7 +120,7 @@ export default class Qix extends GameModel {
     updateTrail(x: number, y: number) {
         this.player.x = x;
         this.player.y = y;
-        this.grid[x][y] = TRAIL;
+        this.grid.set(x, y, TRAIL);
         this.trail.push({x, y});
     }
 
@@ -127,7 +130,7 @@ export default class Qix extends GameModel {
         this.player.drawing = false;
         
         // Convert trail to border temporarily for flood fill check
-        this.trail.forEach(p => this.grid[p.x][p.y] = BORDER);
+        this.trail.forEach(p => this.grid.set(p.x, p.y, BORDER));
 
         const safeArea = new Set<string>();
 
@@ -136,7 +139,7 @@ export default class Qix extends GameModel {
             const qx = Math.floor(qix.pos.x);
             const qy = Math.floor(qix.pos.y);
 
-            if (qx < 0 || qx >= this.width || qy < 0 || qy >= this.height || this.grid[qx][qy] !== EMPTY) continue;
+            if (qx < 0 || qx >= this.width || qy < 0 || qy >= this.height || this.grid.get(qx, qy) !== EMPTY) continue;
             if (safeArea.has(`${qx},${qy}`)) continue;
 
             const stack = [{x: qx, y: qy}];
@@ -150,7 +153,7 @@ export default class Qix extends GameModel {
                     const nx = p.x + d[0];
                     const ny = p.y + d[1];
                     if(nx>=0 && nx<this.width && ny>=0 && ny<this.height) {
-                        if (this.grid[nx][ny] === EMPTY && !visitedThisQix.has(`${nx},${ny}`)) {
+                        if (this.grid.get(nx, ny) === EMPTY && !visitedThisQix.has(`${nx},${ny}`)) {
                             visitedThisQix.add(`${nx},${ny}`);
                             stack.push({x: nx, y: ny});
                         }
@@ -164,8 +167,8 @@ export default class Qix extends GameModel {
         let captured = 0;
         for(let x=0; x<this.width; x++) {
             for(let y=0; y<this.height; y++) {
-                if (this.grid[x][y] === EMPTY && !safeArea.has(`${x},${y}`)) {
-                    this.grid[x][y] = FILLED;
+                if (this.grid.get(x, y) === EMPTY && !safeArea.has(`${x},${y}`)) {
+                    this.grid.set(x, y, FILLED);
                     captured++;
                     this.effects$.next({ type: 'PARTICLE', x, y, color: 0x0000ff, style: 'PUFF' });
                 }
@@ -174,8 +177,8 @@ export default class Qix extends GameModel {
 
         // Convert the path itself to filled area
         this.trail.forEach(p => {
-            if (this.grid[p.x][p.y] === BORDER) {
-                this.grid[p.x][p.y] = FILLED;
+            if (this.grid.get(p.x, p.y) === BORDER) {
+                this.grid.set(p.x, p.y, FILLED);
                 captured++;
             }
         });
@@ -193,11 +196,13 @@ export default class Qix extends GameModel {
         }
     }
 
-    tick() {
+    tick(dt: number) {
+        if (this.isGameOver) return;
+
         // Move Qixes
         for (const qix of this.qixes) {
-            let nx = qix.pos.x + qix.vel.x;
-            let ny = qix.pos.y + qix.vel.y;
+            let nx = qix.pos.x + qix.vel.x * dt;
+            let ny = qix.pos.y + qix.vel.y * dt;
 
             const ix = Math.floor(nx);
             const iy = Math.floor(ny);
@@ -207,7 +212,7 @@ export default class Qix extends GameModel {
                  continue;
             }
 
-            const cell = this.grid[ix][iy];
+            const cell = this.grid.get(ix, iy);
 
             if (cell === TRAIL) {
                 this.handleDeath();
@@ -216,20 +221,22 @@ export default class Qix extends GameModel {
 
             if (cell === BORDER || cell === FILLED) {
                 // Bounce logic
-                const testX = Math.floor(qix.pos.x + qix.vel.x);
+                const testX = Math.floor(qix.pos.x + qix.vel.x * dt);
                 const testY = Math.floor(qix.pos.y);
-                if (testX < 0 || testX >= this.width || (this.grid[testX][testY] !== EMPTY && this.grid[testX][testY] !== TRAIL)) {
+                const cellX = this.grid.get(testX, testY);
+                if (testX < 0 || testX >= this.width || (cellX !== EMPTY && cellX !== TRAIL)) {
                     qix.vel.x *= -1;
                 }
                 
                 const testX2 = Math.floor(qix.pos.x);
-                const testY2 = Math.floor(qix.pos.y + qix.vel.y);
-                if (testY2 < 0 || testY2 >= this.height || (this.grid[testX2][testY2] !== EMPTY && this.grid[testX2][testY2] !== TRAIL)) {
+                const testY2 = Math.floor(qix.pos.y + qix.vel.y * dt);
+                const cellY = this.grid.get(testX2, testY2);
+                if (testY2 < 0 || testY2 >= this.height || (cellY !== EMPTY && cellY !== TRAIL)) {
                     qix.vel.y *= -1;
                 }
                 
-                nx = qix.pos.x + qix.vel.x;
-                ny = qix.pos.y + qix.vel.y;
+                nx = qix.pos.x + qix.vel.x * dt;
+                ny = qix.pos.y + qix.vel.y * dt;
             }
 
             qix.pos.x = nx;
@@ -244,6 +251,7 @@ export default class Qix extends GameModel {
         this.status$.next('GAME OVER');
         this.audio.playGameOver();
         this.effects$.next({ type: 'EXPLODE', x: this.player.x, y: this.player.y, color: 0xff0000, style: 'EXPLODE' });
+        this.gameLoop.stop();
         setTimeout(() => this.effects$.next({ type: 'GAMEOVER' }), 2000);
     }
 
@@ -251,6 +259,7 @@ export default class Qix extends GameModel {
         this.status$.next('LEVEL CLEARED!');
         this.audio.playMatch();
         setTimeout(() => {
+            this.gameLoop.stop();
             this.level++;
             this.startLevel();
         }, 2000);
@@ -259,10 +268,9 @@ export default class Qix extends GameModel {
     emit() {
         const items: GameItem[] = [];
         // Optimize: Only render non-empty cells to save triangles
-        for(let x=0; x<this.width; x++) for(let y=0; y<this.height; y++) {
-            const t = this.grid[x][y];
+        this.grid.forEach((t, x, y) => {
             if (t !== EMPTY) items.push({ id: `q_${x}_${y}`, x, y, type: t });
-        }
+        });
         
         items.push({ id: 'player', x: this.player.x, y: this.player.y, type: 10 });
         

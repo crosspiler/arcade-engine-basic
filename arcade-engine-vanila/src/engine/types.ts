@@ -52,7 +52,7 @@ export interface RenderConfig {
     customGeometry?: (type: number) => any;
 }
 
-export type InputType = 'UP' | 'DOWN' | 'LEFT' | 'RIGHT' | 'SELECT';
+export type InputType = 'UP' | 'DOWN' | 'LEFT' | 'RIGHT' | 'SELECT' | 'CLICK';
 
 export interface InputAction {
     type: InputType;

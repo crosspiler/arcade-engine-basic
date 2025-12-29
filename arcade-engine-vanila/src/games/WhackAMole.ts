@@ -3,7 +3,7 @@ import { interval, filter } from 'rxjs';
 import { GameModel } from './GameModel';
 import type{ GameItem, InputAction, SoundEmitter } from '../engine/types';
 
-export class WhackAMole extends GameModel {
+export default class WhackAMole extends GameModel {
     grid: number[] = [];
     timer = 30;
 

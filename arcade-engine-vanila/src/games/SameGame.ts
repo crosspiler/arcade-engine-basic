@@ -2,7 +2,7 @@
 import { GameModel } from './GameModel';
 import type{ GameItem, InputAction, SoundEmitter } from '../engine/types';
 
-export class SameGame extends GameModel {
+export default class SameGame extends GameModel {
     grid: number[][] = []; 
 
     constructor(audio?: SoundEmitter) { super(10, 10, 'samegame', audio); }

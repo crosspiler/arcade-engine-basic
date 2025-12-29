@@ -1,0 +1,57 @@
+GAME DESIGN DOCUMENT: PATH TO POWER (Political Conquest)
+
+1. CONCEPT
+   - Genre: Strategy / RPG / Simulation
+   - Theme: Rise from poverty to political supremacy.
+   - Inspiration: Shadow of War (Nemesis System), Crusader Kings (Intrigue).
+
+2. PLAYER CHARACTER
+   - Starts as: "The Nobody" (Weak, Poor, Unknown).
+   - Stats:
+     - Influence (Mana): Used for speech, recruiting, swaying crowds.
+     - Wealth (Gold): Used for bribes, hiring mercenaries, buying gear.
+     - Notoriety (Heat): How much the current rulers want you dead. High notoriety = harder defenses but more fear.
+     - Power (Strength): Combat ability and force.
+
+3. THE WORLD (Grid Based)
+   - The map is divided into "Districts" or "Forts".
+   - Each District is controlled by a procedurally generated "Leader" (The Nemesis).
+   - Districts have:
+     - Population (Health of the district).
+     - Loyalty (Resistance to capture).
+     - Wealth (Reward for capture).
+     - Defense (Difficulty of forceful takeover).
+
+4. GAMEPLAY LOOP
+   
+   PHASE 1: INFILTRATION (The Grind)
+   - Move around the grid to find "Nodes" of interest (Taverns, Guard Posts, Markets).
+   - Perform minor actions to build stats:
+     - "Beg/Work" -> +Wealth
+     - "Orate" -> +Influence
+     - "Petty Crime" -> +Wealth, +Notoriety
+
+   PHASE 2: DESTABILIZATION (The Attack)
+   - Target the District Leader's assets (Lieutenants, Supply lines).
+   - Select Action Type:
+     A. BRIBE: Pay Wealth to remove a Lieutenant or lower District Defense.
+     B. TRAP: Set up a scandal or physical trap. Lowers Leader Strength.
+     C. INFLUENCE: Use Charisma/Followers to convert population. Lowers Loyalty.
+     D. HUMILIATE: Publicly defeat a Lieutenant. Massive Influence gain, lowers Leader Morale.
+     E. KILL: Assassinate a target. High Notoriety gain. Removes obstacle permanently but might be replaced by someone worse.
+     F. RECRUIT: Turn a Lieutenant to your side. They provide passive bonuses.
+
+   PHASE 3: THE COUP (Fort Capture)
+   - Trigger the final confrontation for the District.
+   - Success: You become the District Leader. Gain passive income/influence.
+   - Failure: You are injured/imprisoned. Lose stats or time. Nemesis grows stronger.
+
+5. PROCEDURAL STORYTELLING
+   - Leaders have traits (e.g., "Greedy", "Paranoid", "Honorable").
+   - Actions generate log entries:
+     "You tried to Bribe Captain X, but his 'Honorable' trait caused him to attack you!"
+     "You Humiliated the Mayor. He now has the 'Broken' trait."
+
+6. PROGRESSION
+   - Capture all districts to win.
+   - As you grow, the "State" sends stronger agents against you.

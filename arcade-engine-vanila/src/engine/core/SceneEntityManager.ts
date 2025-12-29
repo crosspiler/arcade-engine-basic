@@ -45,7 +45,8 @@ export class SceneEntityManager {
             const tx = item.x * tileSize - offsetX;
             const ty = item.y * tileSize - offsetY;
             
-            const zOffset = (item.type === 0) ? -0.1 : 0;
+            const itemZ = (item as any).z || 0;
+            const zOffset = (item.type === 0) ? -0.1 : (itemZ * 0.3);
             const color = item.color !== undefined ? item.color : ((this.renderConfig.colors && this.renderConfig.colors[item.type] !== undefined) 
                 ? this.renderConfig.colors[item.type] 
                 : 0xffffff);
@@ -135,7 +136,7 @@ export class SceneEntityManager {
                     mat.needsUpdate = true;
                 }
 
-                if (Math.abs(mesh.position.x - tx) > 0.01 || Math.abs(mesh.position.y - ty) > 0.01 || mesh.position.z !== zOffset) {
+                if (Math.abs(mesh.position.x - tx) > 0.01 || Math.abs(mesh.position.y - ty) > 0.01 || Math.abs(mesh.position.z - zOffset) > 0.01) {
                     const duration = item.tween?.duration !== undefined ? item.tween.duration : 150;
                     TWEEN.to(mesh.position, { x: tx, y: ty, z: zOffset }, duration);
                 }

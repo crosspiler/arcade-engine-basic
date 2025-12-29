@@ -2,7 +2,7 @@
 import { GameModel } from './GameModel';
 import type{ GameItem, InputAction, SoundEmitter } from '../engine/types';
 
-export class Minesweeper extends GameModel {
+export default class Minesweeper extends GameModel {
     grid: { mine: boolean, state: 'covered' | 'revealed', neighbors: number }[][] = [];
     generated = false;
 

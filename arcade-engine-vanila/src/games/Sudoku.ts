@@ -2,7 +2,7 @@
 import { GameModel } from './GameModel';
 import type { GameItem, InputAction, SoundEmitter } from '../engine/types';
 
-export class Sudoku extends GameModel {
+export default class Sudoku extends GameModel {
     grid: number[] = [];
     fixed: boolean[] = [];
     selectedIdx: number = -1;

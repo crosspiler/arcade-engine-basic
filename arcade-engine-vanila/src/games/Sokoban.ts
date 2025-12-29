@@ -1,14 +1,22 @@
 
 import type { GameItem, InputAction, SoundEmitter } from '../engine/types';
 import { GameModel } from './GameModel';
+import { Grid } from '../engine/features/Grid';
+import { DirectionalInteraction } from '../engine/features/interactionSystems/DirectionalInteraction';
 
-export class SokobanGame extends GameModel {
+export default class SokobanGame extends GameModel {
     playerPos = { x: 0, y: 0 };
-    grid: (GameItem | null)[][] = [];
+    grid!: Grid<GameItem | null>;
     targets: { x: number, y: number }[] = [];
+    interaction: DirectionalInteraction;
 
     constructor(audio?: SoundEmitter) {
         super(8, 8, 'sokoban', audio);
+        this.grid = new Grid(8, 8, null);
+        this.interaction = new DirectionalInteraction(
+            (dx, dy) => this.handleMove(dx, dy),
+            () => this.startLevel()
+        );
     }
 
     start() {
@@ -25,13 +33,13 @@ export class SokobanGame extends GameModel {
     }
 
     generateLevel() {
-        this.grid = Array(this.width).fill(null).map(() => Array(this.height).fill(null));
+        this.grid = new Grid(this.width, this.height, null);
         this.targets = [];
         
         // 1. Create a room with walls
         for(let x=0; x<this.width; x++) for(let y=0; y<this.height; y++) {
             if (x===0 || x===this.width-1 || y===0 || y===this.height-1) {
-                this.grid[x][y] = { id: `w_${x}_${y}`, type: 1, x, y };
+                this.grid.set(x, y, { id: `w_${x}_${y}`, type: 1, x, y });
             }
         }
 
@@ -73,8 +81,8 @@ export class SokobanGame extends GameModel {
                 playerX > 0 && playerX < this.width-1 && playerY > 0 && playerY < this.height-1) {
                 
                 // Check collisions
-                const obs1 = this.grid[pullX][pullY];
-                const obs2 = this.grid[playerX][playerY];
+                const obs1 = this.grid.get(pullX, pullY);
+                const obs2 = this.grid.get(playerX, playerY);
                 const boxAtPull = boxes.some(b => b.x === pullX && b.y === pullY);
                 const boxAtPlayer = boxes.some(b => b.x === playerX && b.y === playerY);
 
@@ -90,41 +98,37 @@ export class SokobanGame extends GameModel {
         this.targets = tempTargets;
 
         // Clear previous box/target markers inside the walls
-        for(let x=1; x<this.width-1; x++) for(let y=1; y<this.height-1; y++) this.grid[x][y] = null;
+        for(let x=1; x<this.width-1; x++) for(let y=1; y<this.height-1; y++) this.grid.set(x, y, null);
         
         this.targets.forEach(t => {
-            this.grid[t.x][t.y] = { id: `t_${t.x}_${t.y}`, type: 4, x: t.x, y: t.y };
+            this.grid.set(t.x, t.y, { id: `t_${t.x}_${t.y}`, type: 4, x: t.x, y: t.y });
         });
 
         boxes.forEach((b, i) => {
             const onTarget = this.isTarget(b.x, b.y);
-            this.grid[b.x][b.y] = { id: `b_${i}`, type: onTarget ? 5 : 2, x: b.x, y: b.y };
+            this.grid.set(b.x, b.y, { id: `b_${i}`, type: onTarget ? 5 : 2, x: b.x, y: b.y });
         });
 
         this.emit();
     }
 
     handleInput(action: InputAction) {
-        if (this.isGameOver) return;
-        let dx = 0, dy = 0;
-        if (action.type === 'UP') dy = 1;
-        if (action.type === 'DOWN') dy = -1;
-        if (action.type === 'LEFT') dx = -1;
-        if (action.type === 'RIGHT') dx = 1;
+        this.interaction.handleInput(action, this.isGameOver);
+    }
 
-        if (!dx && !dy) return;
-
+    handleMove(dx: number, dy: number) {
         const tx = this.playerPos.x + dx;
         const ty = this.playerPos.y + dy;
 
         if (this.isWall(tx, ty)) return;
 
-        const p = this.grid[tx] ? this.grid[tx][ty] : null;
+        const p = this.grid.get(tx, ty);
         if (p && (p.type === 2 || p.type === 5)) {
             // Pushing a box
             const px = tx + dx;
             const py = ty + dy;
-            if (this.isWall(px, py) || (this.grid[px][py] && (this.grid[px][py]!.type === 2 || this.grid[px][py]!.type === 5))) return;
+            const nextP = this.grid.get(px, py);
+            if (this.isWall(px, py) || (nextP && (nextP.type === 2 || nextP.type === 5))) return;
             
             this.move(tx, ty, px, py);
             // Check new pos
@@ -145,7 +149,7 @@ export class SokobanGame extends GameModel {
     checkWin() {
         // Check if every target position has a box on it (type 5)
         const allTargetsFilled = this.targets.every(t => {
-            const item = this.grid[t.x][t.y];
+            const item = this.grid.get(t.x, t.y);
             return item && item.type === 5;
         });
 
@@ -171,20 +175,22 @@ export class SokobanGame extends GameModel {
     }
 
     move(x1: number, y1: number, x2: number, y2: number) {
-        this.grid[x2][y2] = this.grid[x1][y1];
-        this.grid[x1][y1] = null;
-        if (this.grid[x2][y2]) {
-            this.grid[x2][y2]!.x = x2;
-            this.grid[x2][y2]!.y = y2;
+        const item = this.grid.get(x1, y1);
+        this.grid.set(x2, y2, item!);
+        this.grid.set(x1, y1, null);
+        if (item) {
+            item.x = x2;
+            item.y = y2;
         }
         // Restore target if we moved off one
         if (this.isTarget(x1, y1)) {
-            this.grid[x1][y1] = { id: `t_${x1}_${y1}`, type: 4, x: x1, y: y1 };
+            this.grid.set(x1, y1, { id: `t_${x1}_${y1}`, type: 4, x: x1, y: y1 });
         }
     }
 
     isWall(x: number, y: number) {
-        return x < 0 || x >= this.width || y < 0 || y >= this.height || (this.grid[x][y] && this.grid[x][y]!.type === 1);
+        const cell = this.grid.get(x, y);
+        return !this.grid.isValid(x, y) || (cell && cell.type === 1);
     }
 
     isTarget(x: number, y: number) {
@@ -193,7 +199,9 @@ export class SokobanGame extends GameModel {
     
     emit() {
         const r: GameItem[] = [];
-        for (let x = 0; x < this.width; x++) for (let y = 0; y < this.height; y++) if (this.grid[x][y]) r.push({ ...this.grid[x][y]!, x, y });
+        this.grid.forEach((item, x, y) => {
+            if (item) r.push({ ...item, x, y });
+        });
         r.push({ id: 'p', type: 3, x: this.playerPos.x, y: this.playerPos.y });
         this.state$.next(r);
     }

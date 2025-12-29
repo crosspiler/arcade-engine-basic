@@ -2,7 +2,7 @@
 import { GameModel } from './GameModel';
 import type{ GameItem, InputAction, SoundEmitter } from '../engine/types';
 
-export class MemoryGame extends GameModel {
+export default class MemoryGame extends GameModel {
     grid: number[][] = [];
     revealed: boolean[][] = [];
     matched: boolean[][] = [];

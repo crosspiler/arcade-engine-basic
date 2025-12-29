@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { interval, filter } from 'rxjs';
 import { GameModel } from './GameModel';
+import { GridCursorInteraction } from '../engine/features/interactionSystems/GridCursorInteraction';
+import { Grid } from '../engine/features/Grid';
 import type { GameItem, InputAction, SoundEmitter } from '../engine/types';
 
 // Direction Bitmasks
@@ -33,8 +35,8 @@ interface Cell {
 }
 
 export default class PipeMaze extends GameModel {
-    grid: Cell[][] = [];
-    cursor = { x: 0, y: 0 };
+    grid!: Grid<Cell>;
+    interaction: GridCursorInteraction;
     
     // Flow State
     timer = 0;
@@ -44,6 +46,13 @@ export default class PipeMaze extends GameModel {
 
     constructor(audio?: SoundEmitter) {
         super(10, 10, 'pipemaze', audio);
+        this.grid = new Grid(10, 10, () => ({ type: 0, filled: false, fixed: false, flowDir: 0 }));
+        this.interaction = new GridCursorInteraction({
+            width: 10,
+            height: 10,
+            onAction: (x, y) => this.handleAction(x, y),
+            onStartLevel: () => this.startLevel()
+        });
     }
 
     start() {
@@ -57,11 +66,10 @@ export default class PipeMaze extends GameModel {
         const cycle = 5;
         const size = Math.min(15, 6 + Math.floor((this.level - 1) / cycle));
         this.resize(size, size);
+        this.interaction.updateConfig({ width: size, height: size });
         
         // Init Grid
-        this.grid = Array(this.width).fill(null).map(() => 
-            Array(this.height).fill(null).map(() => ({ type: 0, filled: false, fixed: false, flowDir: 0 }))
-        );
+        this.grid = new Grid(this.width, this.height, () => ({ type: 0, filled: false, fixed: false, flowDir: 0 }));
 
         // Setup Start/End
         this.startPos = { x: 0, y: Math.floor(Math.random() * (this.height - 2)) + 1, dir: RIGHT };
@@ -82,12 +90,12 @@ export default class PipeMaze extends GameModel {
         this.scramble();
 
         // 5. Fix Start/End (Must be Horizontal for this game's layout)
-        this.grid[this.startPos.x][this.startPos.y] = { type: P_H, filled: true, fixed: true, flowDir: LEFT };
-        this.grid[this.endPos.x][this.endPos.y] = { type: P_H, filled: false, fixed: true, flowDir: 0 };
+        this.grid.set(this.startPos.x, this.startPos.y, { type: P_H, filled: true, fixed: true, flowDir: LEFT });
+        this.grid.set(this.endPos.x, this.endPos.y, { type: P_H, filled: false, fixed: true, flowDir: 0 });
 
         this.timer = 15 + Math.floor((size * size) / 4);
 
-        this.cursor = { x: 1, y: this.startPos.y };
+        this.interaction.cursor = { x: 1, y: this.startPos.y };
         
         this.updateFlow();
         this.status$.next(`Time: ${this.timer}`);
@@ -110,8 +118,9 @@ export default class PipeMaze extends GameModel {
             attempts++;
             const x = Math.floor(Math.random() * this.width);
             const y = Math.floor(Math.random() * this.height);
-            if (this.grid[x][y].type === 0) {
-                this.grid[x][y].type = OBSTACLE;
+            const cell = this.grid.get(x, y);
+            if (cell && cell.type === 0) {
+                cell.type = OBSTACLE;
                 placed++;
             }
         }
@@ -179,24 +188,27 @@ export default class PipeMaze extends GameModel {
             if (prev.y < curr.y || next.y < curr.y) mask |= DOWN;
             if (prev.y > curr.y || next.y > curr.y) mask |= UP;
             
-            this.grid[curr.x][curr.y].type = mask;
+            const cell = this.grid.get(curr.x, curr.y);
+            if (cell) cell.type = mask;
         }
     }
 
     fillRandom() {
         const types = [P_V, P_H, P_UR, P_RD, P_DL, P_LU, P_CROSS];
         for(let x=0; x<this.width; x++) for(let y=0; y<this.height; y++) {
-            if (this.grid[x][y].type === 0) {
-                this.grid[x][y].type = types[Math.floor(Math.random() * types.length)];
+            const cell = this.grid.get(x, y);
+            if (cell && cell.type === 0) {
+                cell.type = types[Math.floor(Math.random() * types.length)];
             }
         }
     }
 
     scramble() {
         for(let x=0; x<this.width; x++) for(let y=0; y<this.height; y++) {
-            if (!this.grid[x][y].fixed) {
+            const cell = this.grid.get(x, y);
+            if (cell && !cell.fixed) {
                 const r = Math.floor(Math.random() * 4);
-                for(let i=0; i<r; i++) this.grid[x][y].type = this.rotateType(this.grid[x][y].type);
+                for(let i=0; i<r; i++) cell.type = this.rotateType(cell.type);
             }
         }
     }
@@ -212,47 +224,36 @@ export default class PipeMaze extends GameModel {
     }
 
     handleInput(action: InputAction) {
-        if (this.isGameOver) return;
+        const changed = this.interaction.handleInput(action, this.isGameOver);
+        if (changed) this.emit();
+    }
 
-        let dx = 0, dy = 0;
-        if (action.type === 'UP') dy = 1;
-        if (action.type === 'DOWN') dy = -1;
-        if (action.type === 'LEFT') dx = -1;
-        if (action.type === 'RIGHT') dx = 1;
-
-        if (dx !== 0 || dy !== 0) {
-            const nx = this.cursor.x + dx;
-            const ny = this.cursor.y + dy;
-            if (nx >= 0 && nx < this.width && ny >= 0 && ny < this.height) {
-                this.cursor.x = nx;
-                this.cursor.y = ny;
-                this.emit();
-            }
-        } else if (action.type === 'SELECT') {
-            const cell = this.grid[this.cursor.x][this.cursor.y];
-            
-            if (!cell.fixed && cell.type !== OBSTACLE) {
-                cell.type = this.rotateType(cell.type);
-                this.audio.playMove();
-                this.updateFlow();
-                this.emit();
-            } else {
-                this.audio.playTone(150, 'sawtooth', 0.1);
-            }
+    handleAction(x: number, y: number) {
+        const cell = this.grid.get(x, y);
+        
+        if (cell && !cell.fixed && cell.type !== OBSTACLE) {
+            cell.type = this.rotateType(cell.type);
+            this.audio.playMove();
+            this.updateFlow();
+        } else {
+            this.audio.playTone(150, 'sawtooth', 0.1);
         }
     }
 
     updateFlow() {
         // Reset filled status
         for(let x=0; x<this.width; x++) for(let y=0; y<this.height; y++) {
-            this.grid[x][y].filled = false;
-            this.grid[x][y].flowDir = 0;
+            const cell = this.grid.get(x, y);
+            if (cell) {
+                cell.filled = false;
+                cell.flowDir = 0;
+            }
         }
 
         // Start is always filled
-        const startCell = this.grid[this.startPos.x][this.startPos.y];
-        startCell.filled = true;
-        startCell.flowDir = LEFT;
+        const startCell = this.grid.get(this.startPos.x, this.startPos.y);
+        if (startCell) startCell.filled = true;
+        if (startCell) startCell.flowDir = LEFT;
 
         const queue = [{x: this.startPos.x, y: this.startPos.y}];
         const visited = new Set<string>();
@@ -262,7 +263,8 @@ export default class PipeMaze extends GameModel {
 
         while(queue.length > 0) {
             const curr = queue.shift()!;
-            const cell = this.grid[curr.x][curr.y];
+            const cell = this.grid.get(curr.x, curr.y);
+            if (!cell) continue;
 
             const dirs = [
                 {x:0, y:1, mask: UP, opp: DOWN},
@@ -276,8 +278,8 @@ export default class PipeMaze extends GameModel {
                     const nx = curr.x + d.x;
                     const ny = curr.y + d.y;
                     if (nx >= 0 && nx < this.width && ny >= 0 && ny < this.height) {
-                        const nextCell = this.grid[nx][ny];
-                        if ((nextCell.type & d.opp) !== 0 && !visited.has(`${nx},${ny}`)) {
+                        const nextCell = this.grid.get(nx, ny);
+                        if (nextCell && (nextCell.type & d.opp) !== 0 && !visited.has(`${nx},${ny}`)) {
                             nextCell.filled = true;
                             nextCell.flowDir = d.opp;
                             visited.add(`${nx},${ny}`);
@@ -325,24 +327,25 @@ export default class PipeMaze extends GameModel {
 
     emit() {
         const items: GameItem[] = [];
-        for(let x=0; x<this.width; x++) for(let y=0; y<this.height; y++) {
-            const cell = this.grid[x][y];
-            const isCursor = this.cursor.x === x && this.cursor.y === y;
-            
-            let color = cell.filled ? 0x0044aa : 0x555555;
-            if (cell.fixed) {
-                color = cell.filled ? 0x0066cc : 0x444444;
-                if (x === this.startPos.x && y === this.startPos.y) color = 0x008800;
-                if (x === this.endPos.x && y === this.endPos.y) color = cell.filled ? 0x0044aa : 0x880000;
-            }
-            if (isCursor) {
-                const c = new THREE.Color(color);
-                c.offsetHSL(0, 0, 0.2);
-                color = c.getHex();
-            }
+        this.grid.forEach((cell, x, y) => {
+            if (cell) {
+                const isCursor = this.interaction.cursor.x === x && this.interaction.cursor.y === y;
+                
+                let color = cell.filled ? 0x0044aa : 0x555555;
+                if (cell.fixed) {
+                    color = cell.filled ? 0x0066cc : 0x444444;
+                    if (x === this.startPos.x && y === this.startPos.y) color = 0x008800;
+                    if (x === this.endPos.x && y === this.endPos.y) color = cell.filled ? 0x0044aa : 0x880000;
+                }
+                if (isCursor) {
+                    const c = new THREE.Color(color);
+                    c.offsetHSL(0, 0, 0.2);
+                    color = c.getHex();
+                }
 
-            items.push(...this.createPipeMeshItems(x, y, cell.type, color, `${cell.type}_${x}_${y}`));
-        }
+                items.push(...this.createPipeMeshItems(x, y, cell.type, color, `${cell.type}_${x}_${y}`));
+            }
+        });
         this.state$.next(items);
     }
 

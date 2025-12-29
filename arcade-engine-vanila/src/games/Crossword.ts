@@ -2,7 +2,7 @@
 import { GameModel } from './GameModel';
 import type{ GameItem, InputAction, SoundEmitter } from '../engine/types';
 
-export class Crossword extends GameModel {
+export default class Crossword extends GameModel {
     grid: string[][] = [];
     solution: string[][] = [];
     selected: {x:number, y:number} = {x:0, y:0};

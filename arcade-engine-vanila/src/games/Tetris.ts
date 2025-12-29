@@ -3,7 +3,7 @@ import { interval, filter } from 'rxjs';
 import { GameModel } from './GameModel';
 import type { GameItem, InputAction, SoundEmitter } from '../engine/types';
 
-export class TetrisGame extends GameModel {
+export default class TetrisGame extends GameModel {
     shapes = [[[1,1,1,1]], [[1,1],[1,1]], [[0,1,0],[1,1,1]], [[1,1,0],[0,1,1]], [[0,1,1],[1,1,0]]];
     cols: Record<number, number> = { 0: 0x00f0f0, 1: 0xf0f000, 2: 0xa000f0, 3: 0xf00000, 4: 0x00f000 };
     grid: (GameItem | null)[][] = [];

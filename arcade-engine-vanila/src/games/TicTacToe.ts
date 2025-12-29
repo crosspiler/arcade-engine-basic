@@ -2,7 +2,7 @@
 import { GameModel } from './GameModel';
 import type { GameItem, InputAction, SoundEmitter } from '../engine/types';
 
-export class TicTacToe extends GameModel {
+export default class TicTacToe extends GameModel {
     grid: number[] = []; // 0: empty, 1: X, 2: O
     turn = 1;
     gridSize = 3;

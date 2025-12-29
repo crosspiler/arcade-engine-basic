@@ -24,9 +24,24 @@ export interface GameDefinition {
     debug?: (game: GameModel) => void;
 }
 
+
 // The single source of truth for all games
-const ALL_GAMES: GameDefinition[] = [
-    // The 'as any' cast is no longer needed if the imported modules have a default export.
+const ALL_GAMES: GameDefinition[] = [ // add new game on top
+    { id: 'towerdefense', name: 'Tower Defense', loader: () => import('./games/TowerDefense'), debug: DEBUG_HANDLERS.default },
+    { id: 'snakeandladder', name: 'SnakeAndLadder', loader: () => import('./games/SnakeAndLadder'), debug: DEBUG_HANDLERS.default },
+    { id: 'ludo', name: 'Ludo', loader: () => import('./games/Ludo'), debug: DEBUG_HANDLERS.default },
+    { id: 'orbito', name: 'Orbito', loader: () => import('./games/Orbito'), debug: DEBUG_HANDLERS.default },
+    { id: 'arkanoid', name: 'Arkanoid', loader: () => import('./games/Arkanoid'), debug: DEBUG_HANDLERS.default },
+    { id: 'reflector', name: 'Reflector', loader: () => import('./games/Reflector'), debug: DEBUG_HANDLERS.default },
+    { id: 'singularity', name: 'Singularity', loader: () => import('./games/Singularity'), debug: DEBUG_HANDLERS.default },
+    { id: 'avalanche', name: 'Avalanche', loader: () => import('./games/Avalanche'), debug: DEBUG_HANDLERS.default },
+    { id: 'vectorzero', name: 'Vector Zero', loader: () => import('./games/VectorZero'), debug: DEBUG_HANDLERS.default },
+    { id: 'watersort', name: 'Water Sort', loader: () => import('./games/WaterSort'), debug: DEBUG_HANDLERS.default },
+    { id: 'mahjong', name: 'Mahjong Solitaire', loader: () => import('./games/MahjongSolitaire'), debug: DEBUG_HANDLERS.default },
+    { id: 'shisensho', name: 'Shisen-Sho', loader: () => import('./games/ShisenSho'), debug: DEBUG_HANDLERS.default },
+    { id: 'boulderdash', name: 'Boulder Dash', loader: () => import('./games/BoulderDash'), debug: DEBUG_HANDLERS.default },
+    { id: 'mastermind', name: 'Mastermind', loader: () => import('./games/Mastermind'), debug: DEBUG_HANDLERS.default }, 
+    { id: 'towerofhanoi', name: 'Tower of Hanoi', loader: () => import('./games/TowerOfHanoi'), debug: DEBUG_HANDLERS.default },
     { id: 'reversi', name: 'Reversi', loader: () => import('./games/Reversi'), debug: DEBUG_HANDLERS.default },
     { id: 'rushhour', name: 'Rush Hour', loader: () => import('./games/RushHour'), debug: DEBUG_HANDLERS.default },
     { id: 'pipemaze', name: 'Pipe Maze', loader: () => import('./games/PipeMaze'), debug: DEBUG_HANDLERS.default },
@@ -36,7 +51,7 @@ const ALL_GAMES: GameDefinition[] = [
     { id: 'pegsolitaire', name: 'Peg Solitaire', loader: () => import('./games/PegSolitaire'), debug: DEBUG_HANDLERS.default },
     { id: 'loderunner', name: 'Lode Runner', loader: () => import('./games/LodeRunner'), debug: DEBUG_HANDLERS.default },
     { id: 'spaceinvaders', name: 'Space Invaders', loader: () => import('./games/SpaceInvaders'), debug: DEBUG_HANDLERS.default },
-    { id: 'snake', name: 'Snake', loader: () => import('./games/Snake') as any, debug: DEBUG_HANDLERS.default },
+    { id: 'snake', name: 'Snake', loader: () => import('./games/Snake'), debug: DEBUG_HANDLERS.default },
     { id: 'sokoban', name: 'Sokoban', loader: () => import('./games/Sokoban'), debug: DEBUG_HANDLERS.default },
     { id: 'match3', name: 'Match-3', loader: () => import('./games/Match3'), debug: DEBUG_HANDLERS.default},
     { id: 'tetris', name: 'Tetris', loader: () => import('./games/Tetris'), debug: DEBUG_HANDLERS.default },
